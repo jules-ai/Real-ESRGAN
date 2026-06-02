@@ -35,10 +35,15 @@ def main(args):
     # prefer params_ema
     if 'params_ema' in loadnet:
         keyname = 'params_ema'
-    else:
+    elif 'params' in loadnet:
         keyname = 'params'
+    else:
+        keyname = None
 
-    model.load_state_dict(loadnet[keyname])
+    if keyname is not None:
+        model.load_state_dict(loadnet[keyname])
+    else:
+        model.load_state_dict(loadnet)
     # set the train mode to false since we will only run the forward pass.
     model.train(False)
     model.cpu().eval()
