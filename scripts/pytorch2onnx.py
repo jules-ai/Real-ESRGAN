@@ -17,6 +17,13 @@ from realesrgan.archs.srvgg_arch import SRVGGNetCompact
 def main(args):
     # determine models according to model names
     args.model_name = args.model_name.split('.')[0]
+
+    # Auto-resolve paths if not provided
+    if args.input is None:
+        args.input = os.path.join('experiments', 'pretrained_models', f'{args.model_name}.pth')
+    if args.output is None:
+        args.output = os.path.join('weights', f'{args.model_name}.onnx')
+
     if args.model_name in ['RealESRGAN_x4plus', 'RealESRNet_x4plus']:  # x4 RRDBNet model
         model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
     elif args.model_name == 'RealESRGAN_x4plus_anime_6B':  # x4 RRDBNet model with 6 blocks
@@ -63,12 +70,18 @@ def main(args):
             }
         }
 
-        # Check if we should pass external_data (available in torch 2.1+ via dynamo, but user asked specifically to set external_data to false, so we pass it if we use dynamo, or we stick to standard export where it's False by default. We can use dynamo=False to use TorchScript exporter which exports weights internally by default.)
+        # Attempt to explicitly pass external_data=False to satisfy user instructions
         if hasattr(torch.onnx, 'export'):
             try:
-                torch.onnx.export(model, x, args.output, dynamo=False, **export_kwargs)
+                # Some modern versions/dynamo paths might accept external_data directly
+                torch.onnx.export(model, x, args.output, dynamo=False, external_data=False, **export_kwargs)
             except TypeError:
-                torch.onnx.export(model, x, args.output, **export_kwargs)
+                try:
+                    # Fallback for standard TorchScript which internally saves weights by default
+                    torch.onnx.export(model, x, args.output, dynamo=False, **export_kwargs)
+                except TypeError:
+                    # Fallback for very old versions or strict signatures
+                    torch.onnx.export(model, x, args.output, **export_kwargs)
         else:
             torch.onnx._export(model, x, args.output, **export_kwargs)
 
@@ -78,8 +91,8 @@ if __name__ == '__main__':
     """Convert pytorch model to onnx models"""
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--input', type=str, default='experiments/pretrained_models/RealESRGAN_x4plus.pth', help='Input model path')
-    parser.add_argument('--output', type=str, default='realesrgan-x4.onnx', help='Output onnx path')
+        '--input', type=str, default=None, help='Input model path. Default: experiments/pretrained_models/<model_name>.pth')
+    parser.add_argument('--output', type=str, default=None, help='Output onnx path. Default: weights/<model_name>.onnx')
     parser.add_argument(
         '--model_name',
         type=str,
