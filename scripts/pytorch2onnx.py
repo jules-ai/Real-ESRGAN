@@ -14,6 +14,18 @@ except ImportError:
 from basicsr.archs.rrdbnet_arch import RRDBNet
 from realesrgan.archs.srvgg_arch import SRVGGNetCompact
 
+
+import torch.nn as nn
+
+class ModelWrapper(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+
+    def forward(self, x):
+        out = self.model(x)
+        return torch.clamp(out, 0, 1)
+
 def main(args):
     # determine models according to model names
     args.model_name = args.model_name.split('.')[0]
@@ -54,6 +66,10 @@ def main(args):
         model.load_state_dict(loadnet)
     # set the train mode to false since we will only run the forward pass.
     model.train(False)
+
+    # Wrap the model to include clamping in the computational graph
+    model = ModelWrapper(model)
+
     model.cpu().eval()
 
     # An example input
