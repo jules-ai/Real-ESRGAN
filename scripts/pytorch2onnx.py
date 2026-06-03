@@ -18,11 +18,12 @@ def main(args):
     # determine models according to model names
     args.model_name = args.model_name.split('.')[0]
 
-    # Auto-resolve paths if not provided
-    if args.input is None:
-        args.input = os.path.join('experiments', 'pretrained_models', f'{args.model_name}.pth')
-    if args.output is None:
-        args.output = os.path.join('weights', f'{args.model_name}.onnx')
+    # Path concatenation
+    input_path = os.path.join(args.pretrained_dir, f'{args.model_name}.pth')
+    output_path = os.path.join(args.output_dir, f'{args.model_name}.onnx')
+
+    # Ensure output directory exists
+    os.makedirs(args.output_dir, exist_ok=True)
 
     if args.model_name in ['RealESRGAN_x4plus', 'RealESRNet_x4plus']:  # x4 RRDBNet model
         model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
@@ -37,7 +38,7 @@ def main(args):
     else:
         raise ValueError(f"Model name {args.model_name} is not supported.")
 
-    loadnet = torch.load(args.input, map_location=torch.device('cpu'))
+    loadnet = torch.load(input_path, map_location=torch.device('cpu'))
 
     # prefer params_ema
     if 'params_ema' in loadnet:
@@ -74,25 +75,24 @@ def main(args):
         if hasattr(torch.onnx, 'export'):
             try:
                 # Some modern versions/dynamo paths might accept external_data directly
-                torch.onnx.export(model, x, args.output, dynamo=False, external_data=False, **export_kwargs)
+                torch.onnx.export(model, x, output_path, dynamo=False, external_data=False, **export_kwargs)
             except TypeError:
                 try:
                     # Fallback for standard TorchScript which internally saves weights by default
-                    torch.onnx.export(model, x, args.output, dynamo=False, **export_kwargs)
+                    torch.onnx.export(model, x, output_path, dynamo=False, **export_kwargs)
                 except TypeError:
                     # Fallback for very old versions or strict signatures
-                    torch.onnx.export(model, x, args.output, **export_kwargs)
+                    torch.onnx.export(model, x, output_path, **export_kwargs)
         else:
-            torch.onnx._export(model, x, args.output, **export_kwargs)
+            torch.onnx._export(model, x, output_path, **export_kwargs)
 
-    print(f"Successfully exported {args.model_name} to {args.output}")
+    print(f"Successfully exported {args.model_name} to {output_path}")
 
 if __name__ == '__main__':
     """Convert pytorch model to onnx models"""
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '--input', type=str, default=None, help='Input model path. Default: experiments/pretrained_models/<model_name>.pth')
-    parser.add_argument('--output', type=str, default=None, help='Output onnx path. Default: weights/<model_name>.onnx')
+    parser.add_argument('--pretrained_dir', type=str, default='experiments/pretrained_models/', help='Pretrained model directory')
+    parser.add_argument('--output_dir', type=str, default='weights/', help='Output onnx directory')
     parser.add_argument(
         '--model_name',
         type=str,
